@@ -13,14 +13,14 @@
 
 
 typedef struct SharedM {	// указатель на разделяемую память и обекты синхронизации для доступа к ней
-	int *i;
+	double *i;
 	int shmid;
 	sem_t *sem1, *sem2;
 } SharedM;
 
 typedef struct ThreadData {	// структуа данных для передачи в поток	
 	SharedM *shm;
-	int *buf;
+	double *buf;
 	pthread_mutex_t *buf_mutex;
 	pthread_cond_t *buf_cond;
 } ThreadData;
@@ -35,7 +35,7 @@ void myhandle(int mysignal)
 {
 	flag = 0;
 }
-int init_data(ThreadData *data, SharedM *shm, int *buf, pthread_mutex_t *buf_mutex, pthread_cond_t *buf_cond)
+int init_data(ThreadData *data, SharedM *shm, double *buf, pthread_mutex_t *buf_mutex, pthread_cond_t *buf_cond)
 {
 	data->shm = shm;
 	data->buf = buf;
@@ -56,12 +56,12 @@ void init_shm (SharedM *shm)
 {
 	int shmkey;
 	shmkey = ftok(".", 5);
-	if ((shm->shmid = shmget(shmkey, sizeof(int), 0644 | IPC_CREAT)) == -1)
+	if ((shm->shmid = shmget(shmkey, sizeof(double), 0644 | IPC_CREAT)) == -1)
 	{
 		perror("shmget");
 		exit(1);
 	}
-	shm->i = (int *) shmat(shm->shmid, 0, 0);
+	shm->i = (double *) shmat(shm->shmid, 0, 0);
 	shm->sem1 = sem_open("sem1", O_CREAT|O_EXCL, 0644, 1);
 	shm->sem2 = sem_open("sem2", O_CREAT|O_EXCL, 0644, 0);
 	sem_unlink("sem1");
@@ -100,7 +100,7 @@ void *thread_C2(void *args)
 		t.tv_sec += 1;
 		if (pthread_cond_timedwait(data->buf_cond, data->buf_mutex, &t) == 0)	// ждём 1 секунду записи в buf, по завершению времени
 		{									// выводим I am alive
-			printf("value = %d\n",*(data->buf));
+			printf("value = %f\n",*(data->buf));
 		}
 		else
 		{
@@ -128,12 +128,14 @@ int main(int argc, char *argv[])
 	}
 	if (pidA == 0)//A process
 	{
-		int i;
+		double f;
+		char input[100];
 		close(fd[0]);
 		while(flag)
 		{
-			scanf("%d",&i);
-			write(fd[1], &i, sizeof(int));
+			scanf("%s",input);
+			if(f = atof(input))
+				write(fd[1], &f, sizeof(double));
 		}		
 		_exit(0);
 	}
@@ -150,7 +152,7 @@ int main(int argc, char *argv[])
 		if (pidC == 0)// C process
 		{
 			pthread_t C1,C2;
-			static int buf;
+			static double buf;
 			static pthread_mutex_t buf_mutex;
 			static pthread_cond_t buf_cond;
 			ThreadData data;
@@ -184,13 +186,13 @@ int main(int argc, char *argv[])
 		{
 			signal(SIGUSR1, myhandle);
 			close(fd[1]);
-			int n;
+			double n;
 			while(flag)
 			{	
 				sem_wait(shm.sem1);//semaphore enter
 				if (!flag)		//проверка условия чтобы не ждать ввода следующего числа от процесса А
 					break;
-				read(fd[0], &n, sizeof(int));
+				read(fd[0], &n, sizeof(double));
 				n=n*n;
 				*(shm.i) = n;
 				sem_post(shm.sem2);//exit
